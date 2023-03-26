@@ -1,0 +1,117 @@
+syntax = "proto3";
+package nano_geyser;
+
+message GetBlockHeaderRequest{
+  uint64 slot = 1;
+  
+}
+
+message GetBlockHeadersResponse{
+
+}
+
+
+message BlockHeader{
+   repeated VoteSignature signature = 1;
+   repeated ValidatorIdentity identity = 2;
+   repeated ValidatorStake stake = 3;
+}
+
+message VoteSignature{
+  string signature = 1;
+}
+message ValidatorIdentity{
+  string identity = 1;
+}
+message ValidatorStake{
+  uint64 stake = 1;
+}
+
+// rpc request and response types----------------------------------------------------------------
+message ShredRequest {
+    uint64 slot = 1;
+    repeated uint64 indices = 2;
+}
+// message GetShredResponse{
+//     string jsonrpc = 1;
+//     GetShredResult shred_result = 2;
+//     int64 id = 3;
+// }
+
+message ShredResult{
+    string leader = 1;
+    // repeated OptionalRpcShred shreds = 2;
+    ShredResponse response = 2;
+}
+// message OptionalRpcShred{
+//     oneof rpc_shred {
+//         RpcShred rpcshred = 1;
+//         google.protobuf.NullValue null = 2;
+//     }
+// }
+// message RpcShred{
+//   oneof shreds{
+//     Shred shred = 1;
+//     google.protobuf.NullValue null = 2;
+//   }
+// }
+// // rpc request and response types...................................................
+
+// Headers.........................................
+message ShredCommonHeader{
+    string signature = 1;
+    ShredVariant variant = 2;
+    uint64 slot = 3;
+    uint32 index = 4;
+    uint32 version = 5;
+    uint32 fec_set_index = 6;
+}
+message DataShredHeader{
+    uint32 parent_offset = 1;
+    ShredFlags flags = 2;
+    uint32 size = 3;
+}
+
+message CodingShredHeader{
+    uint32 num_data_shreds = 1;
+    uint32 num_coding_shreds = 2;
+    uint32 positon = 3;
+}
+// Headers........................................
+enum ShredVariant {
+    MerkleCode = 0;
+    MerkleData = 1;
+}
+
+message ShredResponse{
+    repeated MerkleShredCode code_shreds = 1;
+    repeated MerkleShredData data_shreds = 2;
+}
+// Actual Merkle shreds with payload and headers
+message MerkleShredData{
+    ShredCommonHeader header = 1;
+    DataShredHeader d_header = 2;
+    repeated bytes payload = 3;
+}
+
+message MerkleShredCode{
+    ShredCommonHeader header = 1;
+    CodingShredHeader c_header = 2;
+    repeated bytes payload = 3;
+}
+// Actual Merkle shreds with payload and headers
+
+enum ShredFlags{
+    DEFAULT = 0;
+    SHRED_TICK_REFERENCE_MASK = 1;
+    DATA_COMPLETE_SHRED       = 2;
+    LAST_SHRED_IN_SLOT        = 3;
+}
+
+
+
+
+service NanoGeyser{
+  rpc GetBlockHeaders(GetBlockHeaderRequest) returns (GetBlockHeadersResponse){}
+  rpc GetShreds(ShredRequest) returns (stream ShredResult){}
+}
