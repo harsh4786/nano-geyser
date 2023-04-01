@@ -78,11 +78,18 @@ message CodingShredHeader{
     uint32 positon = 3;
 }
 // Headers........................................
-enum ShredVariant {
-    MerkleCode = 0;
-    MerkleData = 1;
+message Shred {
+  oneof shred{
+    MerkleShredData merkledata = 3;
+    MerkleShredCode merklecode = 4;
+  }
 }
-
+enum ShredVariant{
+  LEGACY_DATA_SHRED = 0;
+  LEGACY_CODE_SHRED = 1;
+  MERKLE_DATA_SHRED = 2;
+  MERKLE_CODE_SHRED = 3;
+}
 message ShredResponse{
     repeated MerkleShredCode code_shreds = 1;
     repeated MerkleShredData data_shreds = 2;
@@ -99,6 +106,17 @@ message MerkleShredCode{
     CodingShredHeader c_header = 2;
     repeated bytes payload = 3;
 }
+
+message LegacyShredCode{
+  ShredCommonHeader header = 1;
+  CodingShredHeader c_header = 2;
+  repeated bytes payload = 3;
+}
+message LegacyShredData{
+  ShredCommonHeader header = 1;
+  CodingShredHeader c_header = 2;
+  repeated bytes payload = 3;
+}
 // Actual Merkle shreds with payload and headers
 
 enum ShredFlags{
@@ -112,6 +130,6 @@ enum ShredFlags{
 
 
 service NanoGeyser{
-  rpc GetBlockHeaders(GetBlockHeaderRequest) returns (GetBlockHeadersResponse){}
+  //rpc GetBlockHeaders(GetBlockHeaderRequest) returns (GetBlockHeadersResponse){}
   rpc GetShreds(ShredRequest) returns (stream ShredResult){}
 }

@@ -1,26 +1,5 @@
-[package]
-name = "nano-geyser"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-tonic = "0.8.3"
-prost = "0.11"
-tokio = { version = "1.24", features = ["macros", "rt-multi-thread"] }
-tokio-stream = { version = "0.1", features = ["net"] }
-futures = "0.3"
-crossbeam = "0.8.2"
-clap = { version = "4.1.4", features = ["derive"] }
-tonic-reflection = "0.6.0"
-solana-ledger = {git="https://github.com/harsh4786/diet-rpc-validator-1", branch="master" }
-solana-sdk = {git="https://github.com/harsh4786/diet-rpc-validator-1", branch="master" }
-
-[build-dependencies]
-tonic-build = "0.8.4"
-
-[dev-dependencies]
-uuid = { version = "1.2.2", features = ["v4", "fast-rng"] }
-futures-util = "0.3.25"
-anyhow = "1"
+[workspace]
+members = [
+    "proto",
+    "server"
+]
