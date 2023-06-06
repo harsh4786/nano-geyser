@@ -1,20 +1,44 @@
 syntax = "proto3";
 package nano_geyser;
 
-message GetBlockHeaderRequest{
+
+enum SlotUpdateStatus {
+  CONFIRMED = 0;
+  PROCESSED = 1;
+  ROOTED = 2;
+}
+
+ message SlotUpdate{
   uint64 slot = 1;
-  
+  optional uint64 parent_slot = 2;
+  SlotUpdateStatus status = 3;
+ }
+// message BlockHeader{
+//    repeated VoteSignature signature = 1;
+//    repeated ValidatorIdentity identity = 2;
+//    repeated ValidatorStake stake = 3;
+// }
+
+// pub struct EntryNotification {
+//   pub slot: Slot,
+//   pub index: usize,
+//   pub entry: EntrySummary,
+// }
+message EntryNotification{
+  uint64 slot = 1;
+  uint64 index = 2;
+  EntrySummary summary = 3;
 }
 
-message GetBlockHeadersResponse{
-
-}
-
-
-message BlockHeader{
-   repeated VoteSignature signature = 1;
-   repeated ValidatorIdentity identity = 2;
-   repeated ValidatorStake stake = 3;
+// pub struct EntrySummary {
+//   pub num_hashes: u64,
+//   pub hash: Hash,
+//   pub num_transactions: u64,
+// }
+message EntrySummary{
+  uint64 slot = 1;
+  bytes hash = 2;
+  uint64 num_transactions = 3;
 }
 
 message VoteSignature{
