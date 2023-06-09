@@ -5,11 +5,11 @@ use std::{
         atomic::{AtomicU64, Ordering},
         Arc,
     },
-    time::SystemTime,
+    time::SystemTime, fmt,
 };
 
 use bs58;
-use crossbeam_channel::{bounded, Sender, TrySendError};
+use crossbeam_channel::{bounded, Sender, TrySendError, unbounded};
 use log::*;
 use serde_derive::Deserialize;
 use serde_json;
@@ -19,9 +19,9 @@ use solana_geyser_plugin_interface::geyser_plugin_interface::{
 };
 use tokio::{runtime::Runtime, sync::oneshot};
 use tonic::transport::Server;
-use nano_geyser::nano_geyser::SlotUpdate;
+use nano_geyser::nano_geyser::{SlotUpdate, EntryNotification};
 use solana_ledger::entry_notifier_service::{EntryNotifier, EntryNotifcation};
-use crate::server::{GeyserService, GeyserServiceConfig};
+use crate::server::{GeyserService, NanoConfig, NanoGeyserService, GeyserServiceConfig};
 use crate::types::{SlotUpdateStatus};
 use nano_geyser::nano_geyser::{
     nano_geyser_server::{
@@ -49,9 +49,15 @@ pub struct NanoGeyserPlugin {
     data: Option<PluginData>,
     
 }
+ impl fmt::Debug for NanoGeyserPlugin {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result{
+        Ok(())
+    }
+ }
 #[derive(Clone, Debug, Deserialize)]
 pub struct NanoConfig{
     geyser_config: GeyserServiceConfig,
+    bind_address: String,
     entry_update_buffer_size: usize,
     slot_update_buffer_size: usize,
 }
@@ -75,9 +81,19 @@ impl GeyserPlugin for NanoGeyserPlugin{
             self.name(),
             config_path
         );
+        let mut file = File::open(config_path)?;
         let mut buf = String::new();
-        
+        file.read_to_string(&mut buf)?;
+        let config: NanoConfig =
+            serde_json::from_str(&buf).map_err(|err| GeyserPluginError::ConfigFileReadError {
+                msg: format!("Error deserializing PluginConfig: {err:?}"),
+            })?;
 
+        let addr = config.bind_address.parse().map_err(|err| GeyserPluginError::ConfigFileReadError { msg: format!("Error parsing bind address") })?;
+        let (slot_update_sender, slot_update_receiver) = bounded(config.slot_update_buffer_size);
+        let svc = NanoGeyserService::new(
+            
+        )
         Ok(())
     }
     fn on_unload(&mut self) {
@@ -111,7 +127,7 @@ impl GeyserPlugin for NanoGeyserPlugin{
             SlotStatus::Rooted => SlotUpdateStatus::Rooted,
             SlotStatus::Confirmed => SlotUpdateStatus::Confirmed,
         };
-        match data.slot_update_sender.try_send(SlotUpdate { slot, parent_slot, status: status as i32}) {
+        match data.slot_update_sender.try_send(SlotUpdate { slot, parent_slot: parent, status: status as i32}) {
             Ok(_) => Ok(()),
             Err(TrySendError::Full(_)) => {
                 warn!("channel queue is full");
@@ -152,3 +168,13 @@ impl GeyserPlugin for NanoGeyserPlugin{
 }
 
 
+#[no_mangle]
+#[allow(improper_ctypes_definitions)]
+/// # Safety
+///
+/// This function returns the Plugin pointer as trait GeyserPlugin.
+pub unsafe extern "C" fn _create_plugin() -> *mut dyn GeyserPlugin {
+    let plugin = NanoGeyserPlugin::default();
+    let plugin: Box<dyn GeyserPlugin> = Box::new(plugin);
+    Box::into_raw(plugin)
+}

@@ -1,4 +1,5 @@
 syntax = "proto3";
+// import "google/protobuf/timestamp.proto";
 package nano_geyser;
 
 
@@ -29,7 +30,15 @@ message EntryNotification{
   uint64 index = 2;
   EntrySummary summary = 3;
 }
-
+message Heartbeat {}
+message TimestampedEntryNotification{
+//  google.protobuf.Timestamp ts = 1;
+  EntryNotification entry_notification = 2;
+}
+ message TimestampedSlotUpdate{
+  // google.protobuf.Timestamp ts = 1;
+  SlotUpdate update = 2;
+ }
 // pub struct EntrySummary {
 //   pub num_hashes: u64,
 //   pub hash: Hash,
@@ -152,8 +161,12 @@ enum ShredFlags{
 
 
 
+message SubscribeSlotUpdateRequest {}
+message SubscribeEntryUpdateRequest {}
 
 service NanoGeyser{
   //rpc GetBlockHeaders(GetBlockHeaderRequest) returns (GetBlockHeadersResponse){}
-  rpc GetShreds(ShredRequest) returns (stream ShredResult){}
+ // rpc GetShreds(ShredRequest) returns (stream ShredResult){}
+  rpc SubscribeEntryUpdates(SubscribeEntryUpdateRequest) returns (stream TimestampedEntryNotification) {}
+  rpc SubscribeSlotUpdates(SubscribeSlotUpdateRequest) returns (stream TimestampedSlotUpdate) {}
 }
