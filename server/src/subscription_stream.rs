@@ -90,3 +90,4 @@ impl<ID: Clone + Display + Send, T> Drop for SubscriptionStream<ID, T> {
         }
     }
 }
+impl<ID: Clone + Display + Send, T> Unpin for SubscriptionStream<ID, T> {}

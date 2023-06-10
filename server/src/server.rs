@@ -21,12 +21,12 @@ use tokio::sync::mpsc::{channel, error::TrySendError as TokioTrySendError, Sende
 use tonic::{metadata::MetadataValue, Request, Response, Status};
 use uuid::Uuid;
 
-use crate::{nano_plugin::NanoConfig, subscription_stream::SubscriptionStream};
+use crate::{nano_plugin::NanoConfig, subscription_stream::{SubscriptionStream, StreamClosedSender}};
 
 
 
 #[derive(Clone)]
-struct SubscriptionClosedSender {
+pub struct SubscriptionClosedSender {
     inner: Sender<SubscriptionClosedEvent>,
 }
 
@@ -38,7 +38,7 @@ struct EntryUpdateSubscription {
     subscription_tx: EntryUpdateSender,
 }
 
-type SlotUpdateSender = TokioSender<Result<TimestampedSlotUpdate, Status>>;
+type SlotUpdateSender = TokioSender<Result<SlotUpdate, Status>>;
 type EntryUpdateSender = TokioSender<Result<TimestampedEntryNotification, Status>>;
 
 
@@ -68,10 +68,23 @@ enum SubscriptionAddedEvent {
     }
 }
 
-pub trait StreamClosedSender<E: Send + 'static>: Send + 'static {
-    type Error: Display;
-    fn send(&self, event: E) -> Result<(), Self::Error>;
+impl Debug for SubscriptionAddedEvent {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let (sub_name, sub_id) = match self {
+            SubscriptionAddedEvent::SlotUpdateSubscription { uuid, .. } => {
+                ("subscribe_slot_update".to_string(), uuid)
+            }
+            SubscriptionAddedEvent::EntryUpdateSubscription { uuid, .. } =>{
+                ("subscribe_entry_update".to_string(), uuid)
+            }
+        };
+        writeln!(
+            f,
+            "subscription type: {sub_name}, subscription id: {sub_id}",
+        )
+    }
 }
+
 
 impl StreamClosedSender<SubscriptionClosedEvent> for SubscriptionClosedSender {
     type Error = crossbeam_channel::TrySendError<SubscriptionClosedEvent>;
@@ -110,10 +123,11 @@ impl ErrorStatusStreamer for EntryUpdateSubscription{
 
 
 
+
 static VOTE_PROGRAM_ID: OnceCell<Vec<u8>> = OnceCell::new();
 pub const HIGHEST_WRITE_SLOT_HEADER: &str = "highest-write-slot";
 pub struct NanoGeyserService{
-    highest_write_Slot: Arc<AtomicU64>,
+    highest_write_slot: Arc<AtomicU64>,
     service_config: GeyserServiceConfig,
     subscription_added_tx: Sender<SubscriptionAddedEvent>,
     subscription_closed_sender: SubscriptionClosedSender,
@@ -121,33 +135,30 @@ pub struct NanoGeyserService{
 }
 impl NanoGeyserService{
     pub fn new(
-        service_config: NanoGeyserService,
-        highest_write_Slot: Arc<AtomicU64>,
-        slot_update_rx: Receiver<TimestampedSlotUpdate>,
+        service_config: GeyserServiceConfig,
+        highest_write_slot: Arc<AtomicU64>,
+        slot_update_rx: Receiver<SlotUpdate>,
         entry_update_rx: Receiver<TimestampedEntryNotification>,
     ) -> Self{
         let (subscription_added_tx, subscription_added_rx) = unbounded();
         let (subscription_closed_tx, subscription_closed_rx) = unbounded();
         let t_hdl = Self::event_loop(slot_update_rx, entry_update_rx, subscription_added_rx, subscription_closed_rx);
         Self { 
-            highest_write_Slot, 
+            highest_write_slot, 
             service_config, 
             subscription_added_tx, 
-            subscription_closed_sender: subscription_closed_tx, 
+            subscription_closed_sender: SubscriptionClosedSender { 
+                inner: subscription_closed_tx,
+             },
             t_hdl 
         }
         
     }
 
     fn handle_subscription_closed(
-        maybe_subscription_closed: Result<SubscriptionClosedEvent, RecvError>,
-        // account_update_subscriptions: &mut HashMap<Uuid, AccountUpdateSubscription>,
-        // partial_account_update_subscriptions: &mut HashMap<Uuid, PartialAccountUpdateSubscription>,
+        maybe_subscription_closed: Result<SubscriptionClosedEvent, RecvError>,    
         slot_update_subscriptions: &mut HashMap<Uuid, SlotUpdateSubscription>,
         entry_update_subscriptions: &mut HashMap<Uuid, EntryUpdateSubscription>,
-        // program_update_subscriptions: &mut HashMap<Uuid, AccountUpdateSubscription>,
-        // transaction_update_subscriptions: &mut HashMap<Uuid, TransactionUpdateSubscription>,
-        // block_update_subscriptions: &mut HashMap<Uuid, BlockUpdateSubscription>,
     ) -> GeyserServiceResult<()> {
         let subscription_closed = maybe_subscription_closed?;
         info!("closing subscription: {:?}", subscription_closed);
@@ -164,7 +175,7 @@ impl NanoGeyserService{
         Ok(())
     }
     fn event_loop(
-        slot_update_rx: Receiver<TimestampedSlotUpdate>,
+        slot_update_rx: Receiver<SlotUpdate>,
         entry_update_rx: Receiver<TimestampedEntryNotification>,
         subscription_added_rx: Receiver<SubscriptionAddedEvent>,
         subscription_closed_rx: Receiver<SubscriptionClosedEvent>,
@@ -194,7 +205,7 @@ impl NanoGeyserService{
                     }
                     recv(entry_update_rx) -> maybe_entry_update =>{
                         info!("Received entry update subscription");
-                        if let Err(e) = Self::handle_entry_update_event(maybe_entry_update, &entry_update_subscriptions){
+                        if let Err(e) = Self::handle_entry_update_event(maybe_entry_update, entry_update_subscriptions){
                             error!("error handling entry update events {}", e);
                             return;
                         }
@@ -210,6 +221,7 @@ impl NanoGeyserService{
             }
     
         })
+        .unwrap()
     }
 
     fn handle_entry_update_event(
@@ -234,7 +246,7 @@ impl NanoGeyserService{
     
     }
     fn handle_slot_update_event(
-        maybe_slot_update: Result<TimestampedSlotUpdate, RecvError>,
+        maybe_slot_update: Result<SlotUpdate, RecvError>,
         slot_update_subscriptions: &HashMap<Uuid, SlotUpdateSubscription>
     ) -> GeyserServiceResult<Vec<Uuid>>{
         let slot_update = maybe_slot_update?;
@@ -274,10 +286,10 @@ impl NanoGeyserService{
 
 #[derive(Debug)]
 enum SubscriptionClosedEvent { 
-    SlotupdateSubscription(Uuid),
+    SlotUpdateSubscription(Uuid),
     EntryUpdateSubscription(Uuid)
 }
-
+#[derive(Clone, Debug, Deserialize)]
 pub struct GeyserServiceConfig{
     //maybe add heartbeats?
     subscriber_buffer_size: usize,
@@ -288,10 +300,61 @@ pub struct GeyserServiceConfig{
 impl NanoGeyser for NanoGeyserService{
     type SubscribeSlotUpdatesStream = SubscriptionStream<Uuid, TimestampedSlotUpdate>;
     async fn subscribe_slot_updates(&self,request: Request<SubscribeSlotUpdateRequest> ) -> Result<Response<Self::SubscribeSlotUpdatesStream>, Status>{
+        let (subscription_tx, subscription_rx) = channel(self.service_config.subscriber_buffer_size);
+        let uuid = Uuid::new_v4();
+        self.subscription_added_tx.try_send(
+            SubscriptionAddedEvent::SlotUpdateSubscription { uuid, notification_sender: subscription_tx }
+        )
+        .map_err(|e|{
+            error!("failed to add subscribe slot updates");
+            Status::internal("error adding slot updates");
+        });
+
+        let stream = SubscriptionStream::new(
+            subscription_rx,
+            uuid,
+            (
+                self.subscription_closed_sender.clone(),
+                SubscriptionClosedEvent::SlotUpdateSubscription(uuid),
+            ),
+            "subscribe_slot_updates",
+        );
+        let mut resp = Response::new(stream);
+        resp.metadata_mut().insert(
+            HIGHEST_WRITE_SLOT_HEADER,
+            MetadataValue::from(self.highest_write_slot.load(Ordering::Relaxed)),
+        );
+        Ok(resp)
 
     }
+
     type SubscribeEntryUpdatesStream = SubscriptionStream<Uuid, TimestampedEntryNotification>;
-    async fn subscribe_entry_updates(&self,request: Request<SubscribeEntryUpdateRequest>) -> Result<Response<Self::SubscribeEntryUpdatesStream>, Status>{}
+    async fn subscribe_entry_updates(&self,request: Request<SubscribeEntryUpdateRequest>) -> Result<Response<Self::SubscribeEntryUpdatesStream>, Status>{
+        let (subscription_tx, subscription_rx) = channel(self.service_config.subscriber_buffer_size);
+        let uuid = Uuid::new_v4();
+        self.subscription_added_tx.try_send(
+            SubscriptionAddedEvent::EntryUpdateSubscription { uuid, notification_sender: subscription_tx }
+        )
+        .map_err(|e| {
+            error!("failed to add subscribe entry updates");
+            Status::internal("error adding entry updates");
+        });
+        let stream = SubscriptionStream::new(
+            subscription_rx,
+            uuid,
+            (
+                self.subscription_closed_sender.clone(),
+                SubscriptionClosedEvent::SlotUpdateSubscription(uuid),
+            ),
+            "subscribe_slot_updates",
+        );
+        let mut resp = Response::new(stream);
+        resp.metadata_mut().insert(
+            HIGHEST_WRITE_SLOT_HEADER,
+            MetadataValue::from(self.highest_write_slot.load(Ordering::Relaxed)),
+        );
+        Ok(resp)
+    }
 
 }
 

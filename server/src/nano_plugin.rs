@@ -15,13 +15,14 @@ use serde_derive::Deserialize;
 use serde_json;
 use solana_geyser_plugin_interface::geyser_plugin_interface::{
     GeyserPlugin, GeyserPluginError, ReplicaAccountInfoVersions, ReplicaBlockInfoVersions,
-    ReplicaTransactionInfoVersions, SlotStatus,
+    ReplicaTransactionInfoVersions, SlotStatus, ReplicaEntryInfoVersions,
+    Result as PluginResult,
 };
 use tokio::{runtime::Runtime, sync::oneshot};
 use tonic::transport::Server;
-use nano_geyser::nano_geyser::{SlotUpdate, EntryNotification};
-use solana_ledger::entry_notifier_service::{EntryNotifier, EntryNotifcation};
-use crate::server::{GeyserService, NanoConfig, NanoGeyserService, GeyserServiceConfig};
+use nano_geyser::nano_geyser::{SlotUpdate, EntryUpdate, TimestampedEntryNotification};
+use solana_ledger::entry_notifier_service::{EntryNotification};
+use crate::server::{NanoGeyserService, GeyserServiceConfig};
 use crate::types::{SlotUpdateStatus};
 use nano_geyser::nano_geyser::{
     nano_geyser_server::{
@@ -37,11 +38,10 @@ pub struct PluginData{
     runtime: Runtime,
     server_exit_sender: oneshot::Sender<()>,
    // block_header_sender: Sender<BlockHeader>,
-    entry_sender: Sender<EntryNotification>,
+    entry_sender: Sender<TimestampedEntryNotification>,
     slot_update_sender: Sender<SlotUpdate>,
     highest_write_slot: Arc<AtomicU64>,
 }
-pub type PluginResult = Result<(), GeyserPluginError>;
 
 #[derive(Default, Debug)]
 pub struct NanoGeyserPlugin {
@@ -49,11 +49,11 @@ pub struct NanoGeyserPlugin {
     data: Option<PluginData>,
     
 }
- impl fmt::Debug for NanoGeyserPlugin {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result{
-        Ok(())
-    }
- }
+//  impl fmt::Debug for NanoGeyserPlugin {
+//     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result{
+//         Ok(())
+//     }
+//  }
 #[derive(Clone, Debug, Deserialize)]
 pub struct NanoConfig{
     geyser_config: GeyserServiceConfig,
@@ -74,7 +74,7 @@ impl GeyserPlugin for NanoGeyserPlugin{
     fn name(&self) -> &'static str {
         "nano-geyser-plugin"
     }
-    fn on_load(&mut self, _config_file: &str) -> PluginResult {
+    fn on_load(&mut self, config_path: &str) -> PluginResult<()> {
         solana_logger::setup_with_default("info");
         info!(
             "Loading plugin {:?} from config_path {:?}",
@@ -90,10 +90,24 @@ impl GeyserPlugin for NanoGeyserPlugin{
             })?;
 
         let addr = config.bind_address.parse().map_err(|err| GeyserPluginError::ConfigFileReadError { msg: format!("Error parsing bind address") })?;
+        let highest_write_slot = Arc::new(AtomicU64::new(0));
         let (slot_update_sender, slot_update_receiver) = bounded(config.slot_update_buffer_size);
+        let (entry_update_sender, entry_update_receiver) = bounded(config.entry_update_buffer_size);
         let svc = NanoGeyserService::new(
-            
-        )
+            config.geyser_config,
+            highest_write_slot,
+            slot_update_receiver,
+            entry_update_receiver
+        );
+        let server = NanoGeyserServer::new(svc);
+        let (server_exit_tx, server_exit_rx) = oneshot::channel();
+        let runtime = Runtime::new().unwrap();
+        runtime.spawn(Server::builder().add_service(server).serve_with_shutdown(addr, async move{
+            let _ = server_exit_rx.await;
+        }));
+        self.data = Some(
+            PluginData { runtime, server_exit_sender: server_exit_tx, entry_sender: entry_update_sender, slot_update_sender: slot_update_sender, highest_write_slot: highest_write_slot }
+        );
         Ok(())
     }
     fn on_unload(&mut self) {
@@ -109,16 +123,16 @@ impl GeyserPlugin for NanoGeyserPlugin{
     //     Ok(())
     // }
 
-    fn notify_end_of_startup(&mut self) -> PluginResult {
+    fn notify_end_of_startup(&self) -> PluginResult<()> {
         Ok(())
     }
 
     fn update_slot_status(
-        &mut self,
+        &self,
         slot: u64,
         parent: Option<u64>,
         status: SlotStatus,
-    ) -> PluginResult {
+    ) -> PluginResult<()>{
         let data = self.data.as_ref().expect("plugin must be initialized");
         debug!("Updating slot {:?} at with status {:?}", slot, status);
 
@@ -142,7 +156,7 @@ impl GeyserPlugin for NanoGeyserPlugin{
 
         }
     }
-    fn notify_entry(&self, entry: ReplicaEntryInfoVersions) -> Result<()> {
+    fn notify_entry(&self, entry: ReplicaEntryInfoVersions) -> PluginResult<()> {
         Ok(())
     }
 

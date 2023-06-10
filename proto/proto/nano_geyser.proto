@@ -25,7 +25,7 @@ enum SlotUpdateStatus {
 //   pub index: usize,
 //   pub entry: EntrySummary,
 // }
-message EntryNotification{
+message EntryUpdate{
   uint64 slot = 1;
   uint64 index = 2;
   EntrySummary summary = 3;
@@ -33,7 +33,7 @@ message EntryNotification{
 message Heartbeat {}
 message TimestampedEntryNotification{
 //  google.protobuf.Timestamp ts = 1;
-  EntryNotification entry_notification = 2;
+  EntryUpdate entry_update = 2;
 }
  message TimestampedSlotUpdate{
   // google.protobuf.Timestamp ts = 1;
