@@ -1,5 +1,5 @@
 [package]
-name = "nano-geyser-grpc"
+name = "nano-geyser-grpc-server"
 version = "0.1.0"
 license = "Apache-2.0"
 authors = ["harsh4786 <hp80738@gmail.com>"]

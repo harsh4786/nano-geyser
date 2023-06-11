@@ -2320,7 +2320,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "nano-geyser-grpc"
+name = "nano-geyser-gprc-client"
+version = "0.1.0"
+dependencies = [
+ "nano-geyser",
+ "solana-ledger",
+ "solana-sdk",
+ "tokio",
+ "tokio-stream",
+]
+
+[[package]]
+name = "nano-geyser-grpc-server"
 version = "0.1.0"
 dependencies = [
  "bs58 0.5.0",
