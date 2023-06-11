@@ -1,5 +1,5 @@
 syntax = "proto3";
-// import "google/protobuf/timestamp.proto";
+import "google/protobuf/timestamp.proto";
 package nano_geyser;
 
 
@@ -36,7 +36,7 @@ message TimestampedEntryNotification{
   EntryUpdate entry_update = 2;
 }
  message TimestampedSlotUpdate{
-  // google.protobuf.Timestamp ts = 1;
+  google.protobuf.Timestamp ts = 1;
   SlotUpdate update = 2;
  }
 // pub struct EntrySummary {

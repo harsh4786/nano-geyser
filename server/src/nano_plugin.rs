@@ -20,7 +20,7 @@ use solana_geyser_plugin_interface::geyser_plugin_interface::{
 };
 use tokio::{runtime::Runtime, sync::oneshot};
 use tonic::transport::Server;
-use nano_geyser::nano_geyser::{SlotUpdate, EntryUpdate, TimestampedEntryNotification};
+use nano_geyser::nano_geyser::{SlotUpdate, EntryUpdate, TimestampedEntryNotification, TimestampedSlotUpdate};
 use solana_ledger::entry_notifier_service::{EntryNotification};
 use crate::server::{NanoGeyserService, GeyserServiceConfig};
 use crate::types::{SlotUpdateStatus};
@@ -39,7 +39,7 @@ pub struct PluginData{
     server_exit_sender: oneshot::Sender<()>,
    // block_header_sender: Sender<BlockHeader>,
     entry_sender: Sender<TimestampedEntryNotification>,
-    slot_update_sender: Sender<SlotUpdate>,
+    slot_update_sender: Sender<TimestampedSlotUpdate>,
     highest_write_slot: Arc<AtomicU64>,
 }
 
@@ -95,7 +95,7 @@ impl GeyserPlugin for NanoGeyserPlugin{
         let (entry_update_sender, entry_update_receiver) = bounded(config.entry_update_buffer_size);
         let svc = NanoGeyserService::new(
             config.geyser_config,
-            highest_write_slot,
+            highest_write_slot.clone(),
             slot_update_receiver,
             entry_update_receiver
         );
@@ -106,7 +106,7 @@ impl GeyserPlugin for NanoGeyserPlugin{
             let _ = server_exit_rx.await;
         }));
         self.data = Some(
-            PluginData { runtime, server_exit_sender: server_exit_tx, entry_sender: entry_update_sender, slot_update_sender: slot_update_sender, highest_write_slot: highest_write_slot }
+            PluginData { runtime, server_exit_sender: server_exit_tx, entry_sender: entry_update_sender,  slot_update_sender, highest_write_slot }
         );
         Ok(())
     }
@@ -141,7 +141,14 @@ impl GeyserPlugin for NanoGeyserPlugin{
             SlotStatus::Rooted => SlotUpdateStatus::Rooted,
             SlotStatus::Confirmed => SlotUpdateStatus::Confirmed,
         };
-        match data.slot_update_sender.try_send(SlotUpdate { slot, parent_slot: parent, status: status as i32}) {
+        match data.slot_update_sender.try_send(TimestampedSlotUpdate { 
+            ts: Some(prost_types::Timestamp::from(SystemTime::now())),
+            update: Some(SlotUpdate{
+                 slot,
+                 parent_slot: parent,
+                 status: status as i32,
+            })
+         }) {
             Ok(_) => Ok(()),
             Err(TrySendError::Full(_)) => {
                 warn!("channel queue is full");

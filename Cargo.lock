@@ -2308,6 +2308,7 @@ dependencies = [
  "futures",
  "futures-util",
  "prost",
+ "prost-types",
  "solana-ledger",
  "solana-sdk",
  "tokio",

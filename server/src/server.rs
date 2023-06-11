@@ -38,7 +38,7 @@ struct EntryUpdateSubscription {
     subscription_tx: EntryUpdateSender,
 }
 
-type SlotUpdateSender = TokioSender<Result<SlotUpdate, Status>>;
+type SlotUpdateSender = TokioSender<Result<TimestampedSlotUpdate, Status>>;
 type EntryUpdateSender = TokioSender<Result<TimestampedEntryNotification, Status>>;
 
 
@@ -137,7 +137,7 @@ impl NanoGeyserService{
     pub fn new(
         service_config: GeyserServiceConfig,
         highest_write_slot: Arc<AtomicU64>,
-        slot_update_rx: Receiver<SlotUpdate>,
+        slot_update_rx: Receiver<TimestampedSlotUpdate>,
         entry_update_rx: Receiver<TimestampedEntryNotification>,
     ) -> Self{
         let (subscription_added_tx, subscription_added_rx) = unbounded();
@@ -175,7 +175,7 @@ impl NanoGeyserService{
         Ok(())
     }
     fn event_loop(
-        slot_update_rx: Receiver<SlotUpdate>,
+        slot_update_rx: Receiver<TimestampedSlotUpdate>,
         entry_update_rx: Receiver<TimestampedEntryNotification>,
         subscription_added_rx: Receiver<SubscriptionAddedEvent>,
         subscription_closed_rx: Receiver<SubscriptionClosedEvent>,
@@ -205,7 +205,7 @@ impl NanoGeyserService{
                     }
                     recv(entry_update_rx) -> maybe_entry_update =>{
                         info!("Received entry update subscription");
-                        if let Err(e) = Self::handle_entry_update_event(maybe_entry_update, entry_update_subscriptions){
+                        if let Err(e) = Self::handle_entry_update_event(maybe_entry_update,&mut entry_update_subscriptions){
                             error!("error handling entry update events {}", e);
                             return;
                         }
@@ -226,7 +226,7 @@ impl NanoGeyserService{
 
     fn handle_entry_update_event(
         maybe_entry_update: Result<TimestampedEntryNotification, RecvError>,
-        entry_update_subscriptions: HashMap<Uuid, EntryUpdateSubscription> 
+        entry_update_subscriptions:&mut HashMap<Uuid, EntryUpdateSubscription> 
     ) -> GeyserServiceResult<Vec<Uuid>>{
          let entry_update = maybe_entry_update?;
          let failed_entry_updates = entry_update_subscriptions.iter().filter_map(|(uuid, sub)|{
@@ -246,7 +246,7 @@ impl NanoGeyserService{
     
     }
     fn handle_slot_update_event(
-        maybe_slot_update: Result<SlotUpdate, RecvError>,
+        maybe_slot_update: Result<TimestampedSlotUpdate, RecvError>,
         slot_update_subscriptions: &HashMap<Uuid, SlotUpdateSubscription>
     ) -> GeyserServiceResult<Vec<Uuid>>{
         let slot_update = maybe_slot_update?;
