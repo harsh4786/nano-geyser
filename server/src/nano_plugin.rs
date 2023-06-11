@@ -20,10 +20,9 @@ use solana_geyser_plugin_interface::geyser_plugin_interface::{
 };
 use tokio::{runtime::Runtime, sync::oneshot};
 use tonic::transport::Server;
-use nano_geyser::nano_geyser::{SlotUpdate, EntryUpdate, TimestampedEntryNotification, TimestampedSlotUpdate};
+use nano_geyser::nano_geyser::{SlotUpdate, EntryUpdate, TimestampedEntryNotification, TimestampedSlotUpdate, SlotUpdateStatus};
 use solana_ledger::entry_notifier_service::{EntryNotification};
 use crate::server::{NanoGeyserService, GeyserServiceConfig};
-use crate::types::{SlotUpdateStatus};
 use nano_geyser::nano_geyser::{
     nano_geyser_server::{
         NanoGeyserServer,
