@@ -14,8 +14,7 @@ use log::*;
 use serde_derive::Deserialize;
 use serde_json;
 use solana_geyser_plugin_interface::geyser_plugin_interface::{
-    GeyserPlugin, GeyserPluginError, ReplicaAccountInfoVersions, ReplicaBlockInfoVersions,
-    ReplicaTransactionInfoVersions, SlotStatus, ReplicaEntryInfoVersions,
+    GeyserPlugin, GeyserPluginError, SlotStatus, ReplicaEntryInfoVersions,
     Result as PluginResult,
 };
 use tokio::{runtime::Runtime, sync::oneshot};
@@ -27,10 +26,9 @@ use nano_geyser::nano_geyser::{
     nano_geyser_server::{
         NanoGeyserServer,
     },
-
-    MerkleShredData,
-    MerkleShredCode,
-    Shred,
+    // MerkleShredData,
+    // MerkleShredCode,
+    // Shred,
 };
 #[derive(Debug)]
 pub struct PluginData{

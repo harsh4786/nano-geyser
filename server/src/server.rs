@@ -1,12 +1,11 @@
 use std::{
-    collections::{HashMap, HashSet},
-    fmt::{Debug, Display, Formatter},
+    collections::{HashMap},
+    fmt::{Debug, Formatter},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
     },
     thread::{Builder, JoinHandle},
-    time::{Duration, Instant},
 };
 use crossbeam_channel::{tick, unbounded, Receiver, RecvError, Sender};
 use log::*;
@@ -14,14 +13,13 @@ use nano_geyser::nano_geyser::{SlotUpdate, TimestampedEntryNotification,
     TimestampedSlotUpdate, SubscribeEntryUpdateRequest, SubscribeSlotUpdateRequest,
     nano_geyser_server::NanoGeyser,
 };
-use once_cell::sync::OnceCell;
 use serde_derive::Deserialize;
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, error::TrySendError as TokioTrySendError, Sender as TokioSender};
 use tonic::{metadata::MetadataValue, Request, Response, Status};
 use uuid::Uuid;
 
-use crate::{nano_plugin::NanoConfig, subscription_stream::{SubscriptionStream, StreamClosedSender}};
+use crate::subscription_stream::{SubscriptionStream, StreamClosedSender};
 
 
 
@@ -124,7 +122,7 @@ impl ErrorStatusStreamer for EntryUpdateSubscription{
 
 
 
-static VOTE_PROGRAM_ID: OnceCell<Vec<u8>> = OnceCell::new();
+// static VOTE_PROGRAM_ID: OnceCell<Vec<u8>> = OnceCell::new();
 pub const HIGHEST_WRITE_SLOT_HEADER: &str = "highest-write-slot";
 pub struct NanoGeyserService{
     highest_write_slot: Arc<AtomicU64>,
@@ -307,8 +305,8 @@ impl NanoGeyser for NanoGeyserService{
         )
         .map_err(|e|{
             error!("failed to add subscribe slot updates");
-            Status::internal("error adding slot updates");
-        });
+            Status::internal("error adding slot updates")
+        })?;
 
         let stream = SubscriptionStream::new(
             subscription_rx,
@@ -337,8 +335,8 @@ impl NanoGeyser for NanoGeyserService{
         )
         .map_err(|e| {
             error!("failed to add subscribe entry updates");
-            Status::internal("error adding entry updates");
-        });
+            Status::internal("error adding entry updates")
+        })?;
         let stream = SubscriptionStream::new(
             subscription_rx,
             uuid,

@@ -32,7 +32,7 @@ message EntryUpdate{
 }
 message Heartbeat {}
 message TimestampedEntryNotification{
-//  google.protobuf.Timestamp ts = 1;
+  google.protobuf.Timestamp ts = 1;
   EntryUpdate entry_update = 2;
 }
  message TimestampedSlotUpdate{
